@@ -1,0 +1,205 @@
+---
+title: "CpDyna"
+output: 
+  rmarkdown::html_vignette:
+    fig_caption: true
+bibliography: bibliography.bib
+vignette: >
+  %\VignetteIndexEntry{CpDyna}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+## Description 
+
+The CpDyna package is dedicated to dynamic graphs and implements the algorithm described in [@Corneli2018]. In that paper, a model based approached is proposed in order to cluster the vertices of a dynamic graph, while detecting multiple change points in the interaction intensities. 
+In this vignette, we show how tu use the package on simulated and real datasets.
+
+## Installation
+```{r}
+set.seed(1)
+```
+```{r, echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE }
+library(CpDyna)
+```
+
+## Datasets
+The package contains 1 simulated dataset and 2 real datasets.
+
+* __Gnu__ is a $(3\times40)$ simulated data matrix.  It reports on the first row $40$ interacion times. One interaction time corresponds to an _undirected_ interaction from a source node to a destination node. Source nodes are reported on the second row of __Gnu__, destination nodes on the third one. 
+
+* __wtab__ is a real data.frame reporting cycle hires between tha Santander stations of London, on September 9, 2015 (one day). 
+One interaction is a cycle hire from one station to another one. Stations are the nodes of the dynamic graph.
+	+ Start.Date: the time a bike was taken from a station, expressed in seconds after the midnigth.
+	+ StartStation.Id: the Id of the station the bike was taken from.
+	+ EndStation.Id: the Id of the station the bike was given back.
+
+* __stations_df__ is a data.frame collecting all the information about stations:
+	+ id
+	+ name
+	+ terminalName
+	+ lat
+	+ long
+	+ installed
+	+ locked
+	+ installDate
+	+ removalDate
+	+ temporary
+	+ nbBikes
+	+ nbEmptyDocks
+	+ nbDocks
+
+## Application (simulated data)
+
+Loading the simulated dataset:
+```{r}
+data("Gnu")
+```
+
+A custom partition is created based on the time horizon in __Gnu__:
+```{r}
+tail(Gnu[1,])
+```
+```{r}
+custom_ptn <- c(1:100)
+```
+
+Call to the function ModFit:
+
+```{r, echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE}
+res <- ModFit(Gnu, 
+              4, 
+              4, 
+              MinimalPartition = FALSE, 
+              N_initializations = 20, 
+              custom_partition = custom_ptn)
+```
+
+Looking at the estimated clusters/change points:
+```{r, echo=TRUE}
+res$est_z
+res$est_cp
+```
+
+and plotting the results:
+```{r, eval=FALSE, message=FALSE, warning=FALSE}
+par(mfrow = c(1,4))
+ModPlot(Gnu, res, type = "adjacency")
+```
+
+
+
+```{r  echo=FALSE, out.width = "90%", out.extra='style="display: block;margin: auto;"', fig.cap=""}
+library(knitr)    # For knitting document and include_graphics function
+
+include_graphics("figures/AdjSnaps.png")
+```
+
+
+## Application (real data)
+
+Loading the real datasets:
+
+```{r}
+data(wtab)
+data(stations_df)
+```
+
+In order to take a look at the dynamics, we plot an histogram of the interaction dates: 
+
+```{r, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE}
+
+par(mfrow=c(1,1), bty="n", cex.axis=1.5, cex.lab=1.5)
+hist(wtab$Start.Date, breaks = 60, xaxt="n", yaxt="n", main = "", xlab = "time (hours)")
+last <- 86340      # roughly 24h
+time.seq<-seq(from=1, to=last, by=3600)  
+axis(1, at=time.seq, lab=c(0:23), lwd=.2)
+axis(2, lwd=.2)
+
+```
+
+
+
+```{r  echo=FALSE, out.width = "75%", out.extra='style="display: block;margin: auto;"', fig.cap=""}
+library(knitr)    # For knitting document and include_graphics function
+
+include_graphics("figures/historiginal.png")
+```
+
+
+__Gnu__ is slightly manipulated to fit the ModFit function format:
+
+
+```{r, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE}
+Gnu <- as.matrix(wtab)
+Gnu <- t(Gnu)
+```
+
+Finally, the ModFit function is called to perform node clustering and change point detection:
+
+```{r, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE}
+N <- max(Gnu[2,], Gnu[3,])   # number of nodes/stations
+
+step <- 900      # in seconds, corresponds to 15 minutes
+custom_ptn <- seq(from = step, to = max(Gnu[1,]), by = step)  # user defind partition
+
+res <- ModFit(Gnu, 4, 4, eps=10^(-1),MinimalPartition = FALSE, custom_partition = custom_ptn, N_initializations = 1,  verbose = TRUE)
+
+```
+
+The estimated change points are added to the histogram:
+```{r, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE}
+cp <- res$est_cp
+abline(v = cp, col="red", lwd=1.5)
+```
+
+```{r  echo=FALSE, out.width = "75%", out.extra='style="display: block;margin: auto;"', fig.cap=""}
+library(knitr)    # For knitting document and include_graphics function
+
+include_graphics("figures/histCpDyna.png")
+```
+
+
+### Plotting the results on a map
+
+```{r, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE}
+
+library(mapview)
+library(sp)
+
+
+new_df <- stations_df[, c(1,2,4,5)]
+
+#converting columns from factor to proper formats
+sq<-c(1,3,4)
+for(i in 1:length(sq)) new_df[,sq[i]]<-as.numeric(levels(new_df[,sq[i]]))[new_df[,sq[i]]]
+new_df[,2]<-as.character(levels(new_df[,2]))[new_df[,2]]
+
+WhoIsWho <- seq(1:N)
+
+match_pos <- res$est_z[match(new_df$id, WhoIsWho)]  # for each station (id) in new_df, i look for its position in WhoIsWho and take outz at this position
+new_df<-cbind(new_df, match_pos)
+pos_na <- which(is.na(new_df$match_pos))
+new_df <- new_df[-pos_na, ]
+
+
+
+tav <-c ("RoyalBlue3","red", "green3","gold")
+sub_df <- new_df[,c(3,4)]
+coordinates(sub_df) <- ~long+lat
+proj4string(sub_df) <- CRS("+init=epsg:4326")
+mapview(sub_df, color=tav[new_df$match_pos], cex= 0.5, alpha = 0.8, lwd=6)
+
+```
+
+```{r  echo=FALSE, out.width = "75%", out.extra='style="display: block;margin: auto;"', fig.cap=""}
+library(knitr)    # For knitting document and include_graphics function
+
+include_graphics("figures/map.png")
+```
+
+
+
+### References
+
+

@@ -1,0 +1,10 @@
+useDynLib(CpDyna, .registration=TRUE)
+export("ModFit", "ModPlot", "ModSim")
+importFrom(Rcpp, evalCpp)
+importFrom("mclust", "adjustedRandIndex") 
+importFrom("grDevices", "gray", "rgb")
+importFrom("graphics", "abline", "clip", "image", "par", "plot")
+importFrom("stats", "D", "kmeans", "rpois", "runif")
+importFrom("RColorBrewer", "brewer.pal")
+importFrom("igraph", "graph.adjacency", "V", "E", "layout.fruchterman.reingold")
+
